@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OW Match Tracker @psevpsevpsev</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        input[type=range] { accent-color: #3b82f6; }
+        input[type=checkbox] { accent-color: #3b82f6; }
+        input[type=radio] { accent-color: #3b82f6; }
+        .warning-checkbox { accent-color: #ef4444; }
+        .scrim-checkbox { accent-color: #f59e0b; }
+        .warmup-checkbox { accent-color: #10b981; }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        
+        .uppercase-input { text-transform: uppercase; }
+        
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+        
+        .dragging { opacity: 0.4; }
+        .drag-over { border-top: 2px solid #3b82f6; }
+        
+        .modal-enter { animation: fadeIn 0.2s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        
+        .edit-mode-border { border: 2px solid #f97316 !important; box-shadow: 0 0 15px rgba(249, 115, 22, 0.3); }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans p-4 md:p-6 relative">
+
+    <div class="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-[45%_55%] xl:grid-cols-[40%_60%] gap-6">
+        
+        <!-- Left Panel: Data Entry Form -->
+        <div id="formContainer" class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 transition-all duration-300">
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="formTitle" class="text-2xl font-bold text-blue-400">Log Match Data</h2>
+                <span id="editBadge" class="hidden bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse">EDIT MODE</span>
+            </div>
+            
+            <form id="matchForm" class="space-y-6">
+                
+                <!-- Organization & Metadata -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-700/50 p-4 rounded border border-gray-700">
+                    <div class="col-span-1 md:col-span-2 flex items-end gap-2">
+                        <div class="flex-1">
+                            <label class="block text-sm font-medium mb-1 text-gray-300">Folder / Session</label>
+                            <select id="folderSelect" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white focus:outline-none focus:border-blue-500" onchange="updateActiveFolder()">
+                            </select>
+                        </div>
+                        <button type="button" onclick="createNewFolder()" class="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded border border-gray-500 transition-colors h-[42px]">
+                            + New
+                        </button>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-300">Macro Block / Phase</label>
+                        <select id="blockInput" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white focus:outline-none focus:border-blue-500">
+                            <option value="Unassigned">Unassigned</option>
+                            <option value="Block 1 (Days 1-100)">Block 1 (Days 1-100)</option>
+                            <option value="Block 2 (Days 101-200)">Block 2 (Days 101-200)</option>
+                            <option value="Block 3 (Days 201-300)">Block 3 (Days 201-300)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-2 text-gray-300">Timestamp</label>
+                        <div class="flex gap-4 mb-2 text-sm text-gray-300">
+                            <label class="flex items-center gap-1 cursor-pointer hover:text-white">
+                                <input type="radio" name="timeType" value="auto" checked onchange="toggleTimeInput()"> Auto
+                            </label>
+                            <label class="flex items-center gap-1 cursor-pointer hover:text-white">
+                                <input type="radio" name="timeType" id="timeManualBtn" value="manual" onchange="toggleTimeInput()"> Manual
+                            </label>
+                        </div>
+                        <input type="datetime-local" id="manualTimeInput" class="hidden w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+
+                <!-- Hard Metrics & Context -->
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-300">Map</label>
+                            <input type="text" id="mapInput" placeholder="e.g. Circuit Royal" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white focus:outline-none focus:border-blue-500" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-300">Queue Dynamics</label>
+                            <select id="queueInput" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white focus:outline-none focus:border-blue-500">
+                                <option value="Solo">Solo Queue</option>
+                                <option value="Duo">Duo Queue</option>
+                                <option value="Trio">Trio Queue</option>
+                                <option value="Stack">Stack (4-5)</option>
+                                <option value="Team/Scrim">Team / Scrim</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4">
+                        <div class="flex-1 bg-emerald-900/20 border border-emerald-700/50 p-2 rounded h-[42px] flex items-center justify-center">
+                            <label class="flex items-center gap-2 cursor-pointer text-sm font-bold text-emerald-400 hover:text-emerald-300 transition-colors">
+                                <input type="checkbox" id="warmupInput" class="w-5 h-5 warmup-checkbox"> 
+                                Warmup Completed
+                            </label>
+                        </div>
+                        <div class="flex-1 bg-amber-900/20 border border-amber-700/50 p-2 rounded h-[42px] flex items-center justify-center">
+                            <label class="flex items-center gap-2 cursor-pointer text-sm font-bold text-amber-400 hover:text-amber-300 transition-colors">
+                                <input type="checkbox" id="isScrim" class="w-5 h-5 scrim-checkbox"> 
+                                SCRIM (1.5x)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Title, Labels & Intent -->
+                    <div class="space-y-3 border border-gray-700 bg-gray-800 p-3 rounded">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1 text-gray-300">Match Title <span class="text-xs text-gray-500 font-normal">(Optional)</span></label>
+                                <input type="text" id="titleInput" placeholder="e.g. Insane hold" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1 text-gray-300">Labels / Tags <span class="text-xs text-gray-500 font-normal">(Optional)</span></label>
+                                <input type="text" id="labelsInput" placeholder="e.g. clutch, aim" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none focus:border-blue-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-300">Session Intent <span class="text-xs text-gray-500 font-normal">(Optional)</span></label>
+                            <input type="text" id="intentInput" placeholder="e.g. Focus on maintaining 70%+ resources before spiking" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white text-sm focus:outline-none focus:border-blue-500">
+                        </div>
+                    </div>
+
+                    <!-- VOD & Timestamps -->
+                    <div class="border border-blue-900/50 bg-blue-900/10 p-3 rounded">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="block text-sm font-medium text-blue-300">Replay & VOD Timestamps <span class="text-xs text-blue-400/60 font-normal">(Optional)</span></label>
+                        </div>
+                        <input type="text" id="replayInput" placeholder="Replay Code (e.g. A1B2C3)" maxlength="6" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white uppercase-input focus:outline-none focus:border-blue-500 mb-2">
+                        
+                        <div id="timestampsContainer" class="space-y-2">
+                            <!-- JS injected timestamps -->
+                        </div>
+                        <button type="button" onclick="addTimestampInput()" class="mt-2 text-xs text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1">
+                            <span>+ Add Specific Timestamp</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Heroes -->
+                    <div>
+                        <label class="block text-sm font-medium mb-2 text-gray-300">Heroes Played</label>
+                        <div id="heroesContainer" class="grid grid-cols-2 md:grid-cols-3 gap-2 bg-gray-700 p-3 rounded border border-gray-600">
+                        </div>
+                        <div class="flex gap-2 mt-2">
+                            <input type="text" id="newHeroInput" placeholder="Add new hero..." class="flex-1 max-w-[150px] bg-gray-700 border border-gray-600 rounded p-1.5 text-xs text-white focus:outline-none focus:border-blue-500">
+                            <button type="button" onclick="addNewHero()" class="bg-gray-600 hover:bg-gray-500 text-white text-xs px-3 py-1.5 rounded border border-gray-500 transition-colors">+ Add</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-2 text-gray-300">Result</label>
+                        <div class="flex gap-2">
+                            <label class="flex-1 text-center cursor-pointer">
+                                <input type="radio" name="result" id="resWin" value="Win" class="peer hidden" required>
+                                <div class="py-2 bg-gray-700 peer-checked:bg-green-600 rounded font-bold transition-colors">WIN</div>
+                            </label>
+                            <label class="flex-1 text-center cursor-pointer">
+                                <input type="radio" name="result" id="resLoss" value="Loss" class="peer hidden">
+                                <div class="py-2 bg-gray-700 peer-checked:bg-red-600 rounded font-bold transition-colors">LOSS</div>
+                            </label>
+                            <label class="flex-1 text-center cursor-pointer">
+                                <input type="radio" name="result" id="resDraw" value="Draw" class="peer hidden">
+                                <div class="py-2 bg-gray-700 peer-checked:bg-yellow-600 rounded font-bold transition-colors">DRAW</div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="border-gray-700">
+
+                <!-- Behavioral Metrics -->
+                <div class="space-y-6">
+                    <h3 class="text-xl font-bold text-blue-300 border-b border-gray-700 pb-2">Performance Checklist</h3>
+                    
+                    <!-- Raw Mechanics & Aim -->
+                    <div class="bg-gray-700/50 p-4 rounded border border-gray-700">
+                        <div class="flex items-center gap-2 mb-3">
+                            <h4 class="font-bold text-emerald-400">Raw Mechanics & Aim</h4>
+                        </div>
+                        <div class="mb-2">
+                            <div class="flex justify-between text-xs text-gray-300 mb-1">
+                                <span>Tracking stability, target acquisition & crosshair placement?</span>
+                                <span id="val_mech" class="font-bold text-emerald-400">5</span>
+                            </div>
+                            <input type="range" id="mech" min="1" max="10" value="5" class="w-full h-1 cursor-pointer" oninput="document.getElementById('val_mech').innerText = this.value" style="accent-color: #10b981;">
+                        </div>
+                    </div>
+
+                    <!-- Default Mode & Scouting -->
+                    <div class="bg-gray-700/50 p-4 rounded border border-gray-700">
+                        <div class="flex items-center gap-2 mb-3">
+                            <h4 class="font-bold text-gray-200">Default Mode & Scouting</h4>
+                            <button type="button" onclick="toggleInfo('infoScout')" class="text-blue-400 hover:text-blue-300 transition-colors focus:outline-none" title="Toggle Information">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                            </button>
+                        </div>
+                        <div id="infoScout" class="hidden text-[11px] text-blue-200 bg-blue-900/30 p-2 rounded mb-4 border border-blue-800/50 leading-relaxed">
+                            Focus on gathering info (enemy/ally positions and skills) rather than meaningless damage. Break angles to avoid sightlines, maintain proper distance, and preserve at least 70% of your resources before the main engagement.
+                        </div>
+                        <div class="mb-4">
+                            <div class="flex justify-between text-xs text-gray-300 mb-1">
+                                <span>Prioritized scouting over meaningless damage?</span>
+                                <span id="val_s1" class="font-bold text-blue-400">5</span>
+                            </div>
+                            <input type="range" id="s1" min="1" max="10" value="5" class="w-full h-1 cursor-pointer" oninput="document.getElementById('val_s1').innerText = this.value">
+                        </div>
+                        <div class="mb-4">
+                            <div class="flex justify-between text-xs text-gray-300 mb-1">
+                                <span>Broke angles to avoid sightlines / maintain distance?</span>
+                                <span id="val_s2" class="font-bold text-blue-400">5</span>
+                            </div>
+                            <input type="range" id="s2" min="1" max="10" value="5" class="w-full h-1 cursor-pointer" oninput="document.getElementById('val_s2').innerText = this.value">
+                        </div>
+                        <div class="mb-2">
+                            <div class="flex justify-between text-xs text-gray-300 mb-1">
+                                <span>Maintained 70%+ resources for the spike?</span>
+                                <span id="val_s3" class="font-bold text-blue-400">5</span>
+                            </div>
+                            <input type="range" id="s3" min="1" max="10" value="5" class="w-full h-1 cursor-pointer" oninput="document.getElementById('val_s3').innerText = this.value">
+                        </div>
+                        <div class="mt-4">
+                            <input type="text" id="feedbackScout" placeholder="Feedback per item (Scouting)..." class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-gray-300 text-xs focus:outline-none focus:border-blue-500">
+                        </div>
+                    </div>
+
+                    <!-- Jab & Resource Management -->
+                    <div class="bg-gray-700/50 p-4 rounded border border-gray-700">
+                        <div class="flex items-center gap-2 mb-3">
+                            <h4 class="font-bold text-gray-200">Jab & Resource Management</h4>
+                            <button type="button" onclick="toggleInfo('infoJab')" class="text-blue-400 hover:text-blue-300 transition-colors focus:outline-none" title="Toggle Information">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                            </button>
+                        </div>
+                        <div id="infoJab" class="hidden text-[11px] text-blue-200 bg-blue-900/30 p-2 rounded mb-4 border border-blue-800/50 leading-relaxed">
+                            Baiting phase. Use short, controlled trades (20-30% of your resources max) synced with your team's tempo to force key enemy cooldowns and trade aggro. Immediately return to cover or ally LOS afterward.
+                        </div>
+                        <div class="mb-4">
+                            <div class="flex justify-between text-xs text-gray-300 mb-1">
+                                <span>Utilized 'Jabs' in sync with team's tempo?</span>
+                                <span id="val_j1" class="font-bold text-blue-400">5</span>
+                            </div>
+                            <input type="range" id="j1" min="1" max="10" value="5" class="w-full h-1 cursor-pointer" oninput="document.getElementById('val_j1').innerText = this.value">
+                        </div>
+                        <div class="mb-4">
+                            <div class="flex justify-between text-xs text-gray-300 mb-1">
+                                <span>Used only 20-30% resources to force cooldowns?</span>
+                                <span id="val_j2" class="font-bold text-blue-400">5</span>
+                            </div>
+                            <input type="range" id="j2" min="1" max="10" value="5" class="w-full h-1 cursor-pointer" oninput="document.getElementById('val_j2').innerText = this.value">
+                        </div>
+                        <div class="mb-2">
+                            <div class="flex justify-between text-xs text-gray-300 mb-1">
+                                <span>Immediately returned to cover/LOS to recover?</span>
+                                <span id="val_j3" class="font-bold text-blue-400">5</span>
+                            </div>
+                            <input type="range" id="j3" min="1" max="10" value="5" class="w-full h-1 cursor-pointer" oninput="document.getElementById('val_j3').innerText = this.value">
+                        </div>
+                        <div class="mt-4">
+                            <input type="text" id="feedbackJab" placeholder="Feedback per item (Jabbing)..." class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-gray-300 text-xs focus:outline-none focus:border-blue-500">
+                        </div>
+                    </div>
+
+                    <!-- Spike & Punish -->
+                    <div class="bg-gray-700/50 p-4 rounded border border-gray-700">
+                        <div class="flex items-center gap-2 mb-3">
+                            <h4 class="font-bold text-gray-200">Spike & Punish</h4>
+                            <button type="button" onclick="toggleInfo('infoSpike')" class="text-blue-400 hover:text-blue-300 transition-colors focus:outline-none" title="Toggle Information">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                            </button>
+                        </div>
+                        <div id="infoSpike" class="hidden text-[11px] text-blue-200 bg-blue-900/30 p-2 rounded mb-4 border border-blue-800/50 leading-relaxed">
+                            Execution phase. Capitalize on 'Green Light' timings (when allies engage or enemies waste key skills) by committing your saved resources to secure kills or massive advantages. Do not fixate on one target for longer than 2-3 seconds without scouting.
+                        </div>
+                        <div class="mb-4">
+                            <div class="flex justify-between text-xs text-gray-300 mb-1">
+                                <span>Engaged during 'Green Light' timings?</span>
+                                <span id="val_sp1" class="font-bold text-blue-400">5</span>
+                            </div>
+                            <input type="range" id="sp1" min="1" max="10" value="5" class="w-full h-1 cursor-pointer" oninput="document.getElementById('val_sp1').innerText = this.value">
+                        </div>
+                        <div class="mb-4">
+                            <div class="flex justify-between text-xs text-gray-300 mb-1">
+                                <span>Focused saved resources to secure a kill/advantage?</span>
+                                <span id="val_sp2" class="font-bold text-blue-400">5</span>
+                            </div>
+                            <input type="range" id="sp2" min="1" max="10" value="5" class="w-full h-1 cursor-pointer" oninput="document.getElementById('val_sp2').innerText = this.value">
+                        </div>
+                        <div class="mb-2">
+                            <div class="flex justify-between text-xs text-gray-300 mb-1">
+                                <span>Avoided fixating for 2-3+s & scouted while reloading?</span>
+                                <span id="val_sp3" class="font-bold text-blue-400">5</span>
+                            </div>
+                            <input type="range" id="sp3" min="1" max="10" value="5" class="w-full h-1 cursor-pointer" oninput="document.getElementById('val_sp3').innerText = this.value">
+                        </div>
+                        <div class="mt-4">
+                            <input type="text" id="feedbackSpike" placeholder="Feedback per item (Spiking)..." class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-gray-300 text-xs focus:outline-none focus:border-blue-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Overuse Warnings (Dynamic) -->
+                <div class="bg-red-900/20 p-4 rounded border border-red-900/50">
+                    <label class="block text-sm font-bold mb-3 text-red-400">🚨 Overuse Warnings Flagged?</label>
+                    <div id="warningsContainer" class="space-y-3 text-xs text-gray-300">
+                        <!-- Injected via JS -->
+                    </div>
+                    <div class="flex gap-2 mt-4 pt-3 border-t border-red-900/30">
+                        <input type="text" id="newWarningInput" placeholder="Add custom warning..." class="flex-1 bg-gray-900 border border-red-900/50 rounded p-1.5 text-xs text-white focus:outline-none focus:border-red-500">
+                        <button type="button" onclick="addNewWarning()" class="bg-red-900/50 hover:bg-red-800/80 text-red-300 text-xs px-3 py-1.5 rounded border border-red-800 transition-colors">+ Add</button>
+                    </div>
+                </div>
+
+                <div class="flex gap-4">
+                    <button type="submit" id="submitBtn" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-lg shadow-lg transition-all transform active:scale-[0.99]">
+                        Save Match Data
+                    </button>
+                    <button type="button" id="cancelEditBtn" onclick="cancelEdit()" class="hidden bg-gray-600 hover:bg-gray-500 text-white font-bold py-4 px-6 rounded-lg shadow-lg transition-all">
+                        Cancel Edit
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Right Panel: Dashboard, Diagnostics, History -->
+        <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 flex flex-col h-full max-h-[1750px]">
+            
+            <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-4 gap-3 border-b border-gray-700 pb-4">
+                <h2 class="text-2xl font-bold text-blue-400">Analytical Engine</h2>
+                <div class="flex gap-2 items-center w-full xl:w-auto overflow-x-auto pb-1">
+                    <div class="flex-1 xl:flex-none min-w-[120px]">
+                        <select id="heroFilter" onchange="renderDashboard()" class="w-full bg-gray-700 border border-gray-600 rounded p-1.5 text-xs text-white focus:outline-none focus:border-blue-500">
+                        </select>
+                    </div>
+                    <input type="file" id="importFile" accept=".csv" class="hidden" onchange="handleImportCSV(event)">
+                    <button onclick="document.getElementById('importFile').click()" class="bg-gray-700 hover:bg-gray-600 text-xs py-2 px-3 rounded font-bold border border-gray-500 transition-colors shadow whitespace-nowrap text-blue-300">
+                        📤 Import
+                    </button>
+                    <button onclick="exportCSV()" class="bg-gray-700 hover:bg-gray-600 text-xs py-2 px-3 rounded font-bold border border-gray-500 transition-colors shadow whitespace-nowrap text-green-300">
+                        📥 Export
+                    </button>
+                </div>
+            </div>
+
+            <!-- Trend Graph -->
+            <div class="mb-4 bg-gray-900/50 p-3 rounded border border-gray-700/50 h-[180px] w-full shrink-0">
+                <canvas id="trendChart"></canvas>
+            </div>
+
+            <!-- Dashboard Overview Stats -->
+            <div id="statsDashboard" class="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-4 shrink-0">
+                <!-- Injected via JS -->
+            </div>
+
+            <!-- Advanced Diagnostics Panel -->
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6 border-b border-gray-600 pb-6 shrink-0">
+                
+                <!-- Diagnostic Correlation Matrix -->
+                <div class="bg-gray-900/40 p-3 rounded border border-gray-700 shadow-inner">
+                    <h4 class="text-xs font-bold text-red-400 uppercase tracking-wide mb-2 border-b border-gray-700 pb-1">Diagnostic Habit Matrix</h4>
+                    <div class="space-y-1.5 max-h-[140px] overflow-y-auto pr-1" id="diagnosticMatrix">
+                        <!-- Injected via JS -->
+                    </div>
+                </div>
+
+                <!-- Macro-Block Progression -->
+                <div class="bg-gray-900/40 p-3 rounded border border-gray-700 shadow-inner">
+                    <h4 class="text-xs font-bold text-blue-400 uppercase tracking-wide mb-2 border-b border-gray-700 pb-1">Macro-Block Progression</h4>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-[10px] text-left text-gray-400">
+                            <thead class="text-gray-300 uppercase bg-gray-800/50">
+                                <tr>
+                                    <th class="px-2 py-1 rounded-l">Phase</th>
+                                    <th class="px-2 py-1">WR%</th>
+                                    <th class="px-2 py-1">SCT</th>
+                                    <th class="px-2 py-1">JAB</th>
+                                    <th class="px-2 py-1">SPK</th>
+                                    <th class="px-2 py-1 rounded-r">MCH</th>
+                                </tr>
+                            </thead>
+                            <tbody id="blockComparisonTable">
+                                <!-- Injected via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+            
+            <div class="flex justify-between items-end mb-3 border-b border-gray-700 pb-3 shrink-0">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-300">Match History</h3>
+                </div>
+                <div class="relative max-w-xs w-full">
+                    <input type="text" id="searchInput" placeholder="Search titles, tags, maps..." class="w-full bg-gray-900 border border-gray-600 rounded p-1.5 pl-8 text-white text-sm focus:outline-none focus:border-blue-500" oninput="renderHistory()">
+                    <span class="absolute left-2.5 top-2 text-gray-500">🔍</span>
+                </div>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto pr-2 pb-4 space-y-3" id="matchHistoryContainer">
+            </div>
+            
+            <button onclick="clearHistory()" class="mt-6 text-xs text-red-500 hover:text-red-400 text-right w-full font-bold shrink-0">
+                Clear All Local History
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Match Details Modal Overlay -->
+    <div id="detailsModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-800 border border-gray-600 rounded-xl max-w-lg w-full p-6 shadow-2xl modal-enter relative">
+            <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white font-bold text-xl">&times;</button>
+            <div id="modalContent" class="max-h-[85vh] overflow-y-auto pr-2">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Initialization & Migration --- //
+        const defaultWarnings = [
+            "Focused too much on the spike, neglecting other aspects?",
+            "Inappropriate frequency or intensity of jabs?",
+            "Focused too much only on green lights?",
+            "Absorbed in resource tracking alone?",
+            "Poor team movement/synchronization?",
+            "Missed main engagement timing on a wide off-angle?",
+            "Lost damage angle/failed to join while narrowing angles?",
+            "Missed ally healing/regroup on overly wide angle?"
+        ];
+
+        let matches = JSON.parse(localStorage.getItem('owAdvTracker')) || [];
+        let folders = JSON.parse(localStorage.getItem('owFolders')) || ['Uncategorized'];
+        let activeFolder = localStorage.getItem('owActiveFolder') || folders[0];
+        
+        const defaultHeroes = ['Cassidy', 'Ashe', 'Sojourn', 'Soldier: 76', 'Emre'];
+        let customHeroes = JSON.parse(localStorage.getItem('owCustomHeroes')) || [];
+        let customWarnings = JSON.parse(localStorage.getItem('owCustomWarnings')) || [];
+
+        let editingMatchId = null;
+        let trendChartInstance = null;
+
+        if (!folders.includes(activeFolder)) activeFolder = folders[0];
+
+        // Safely migrate old data structures seamlessly
+        let needsSave = false;
+        matches.forEach(m => {
+            if (!m.warnings) {
+                m.warnings = [];
+                if (m.warnSpike) m.warnings.push(defaultWarnings[0]);
+                if (m.warnJab) m.warnings.push(defaultWarnings[1]);
+                if (m.warnGreenLight) m.warnings.push(defaultWarnings[2]);
+                delete m.warnSpike; delete m.warnJab; delete m.warnGreenLight;
+                needsSave = true;
+            }
+        });
+        if (needsSave) localStorage.setItem('owAdvTracker', JSON.stringify(matches));
+
+        const historyContainer = document.getElementById('matchHistoryContainer');
+        const statsDashboard = document.getElementById('statsDashboard');
+        const folderSelect = document.getElementById('folderSelect');
+        const heroFilter = document.getElementById('heroFilter');
+
+        function toggleTimeInput() {
+            const timeType = document.querySelector('input[name="timeType"]:checked').value;
+            const manualInput = document.getElementById('manualTimeInput');
+            if (timeType === 'manual') {
+                manualInput.classList.remove('hidden');
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                manualInput.value = now.toISOString().slice(0,16);
+            } else {
+                manualInput.classList.add('hidden');
+            }
+        }
+
+        function toggleInfo(id) {
+            const el = document.getElementById(id);
+            if (el.classList.contains('hidden')) el.classList.remove('hidden');
+            else el.classList.add('hidden');
+        }
+
+        // --- VOD Timestamp Management --- //
+        function addTimestampInput(time = '', note = '') {
+            const container = document.getElementById('timestampsContainer');
+            const id = Date.now() + Math.random().toString(36).substr(2, 9);
+            const html = `
+                <div class="flex gap-2 mb-2 timestamp-entry" id="ts_${id}">
+                    <input type="text" placeholder="00:00" value="${time}" class="ts-time w-16 bg-gray-900 border border-gray-600 rounded p-1.5 text-xs text-white focus:outline-none focus:border-blue-500 text-center font-mono">
+                    <input type="text" placeholder="Note (e.g. Wasted bubble)" value="${note}" class="ts-note flex-1 bg-gray-900 border border-gray-600 rounded p-1.5 text-xs text-white focus:outline-none focus:border-blue-500">
+                    <button type="button" onclick="document.getElementById('ts_${id}').remove()" class="text-red-400 hover:text-red-300 px-2 font-bold">&times;</button>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', html);
+        }
+
+        // --- Warnings Management --- //
+        function renderWarnings() {
+            const container = document.getElementById('warningsContainer');
+            const allWarnings = [...defaultWarnings, ...customWarnings];
+            
+            container.innerHTML = allWarnings.map((w, index) => {
+                const isCustom = customWarnings.includes(w);
+                const safeStr = w.replace(/'/g, "\\'");
+                const deleteBtn = isCustom ? `<button type="button" onclick="deleteCustomWarning(event, '${safeStr}')" class="text-red-400 hover:text-red-300 ml-auto px-1" title="Remove warning">&times;</button>` : '';
+                const safeId = 'warn_' + index;
+                
+                return `
+                    <label class="flex items-start gap-3 cursor-pointer hover:text-white transition-colors bg-gray-900/30 p-2 rounded border border-gray-700/50">
+                        <input type="checkbox" name="warning" id="${safeId}" value="${w.replace(/"/g, '&quot;')}" class="w-4 h-4 warning-checkbox mt-0.5">
+                        <span class="flex-1">${w}</span>
+                        ${deleteBtn}
+                    </label>
+                `;
+            }).join('');
+        }
+
+        function addNewWarning() {
+            const input = document.getElementById('newWarningInput');
+            const wName = input.value.trim();
+            if(!wName) return;
+            
+            if(defaultWarnings.some(w => w.toLowerCase() === wName.toLowerCase()) || customWarnings.some(w => w.toLowerCase() === wName.toLowerCase())) {
+                return alert("Warning already exists in the list.");
+            }
+            customWarnings.push(wName); localStorage.setItem('owCustomWarnings', JSON.stringify(customWarnings));
+            input.value = ''; renderWarnings();
+        }
+
+        function deleteCustomWarning(e, wName) {
+            e.preventDefault(); e.stopPropagation();
+            if(confirm(`Remove this custom warning from your options?`)) {
+                customWarnings = customWarnings.filter(w => w !== wName);
+                localStorage.setItem('owCustomWarnings', JSON.stringify(customWarnings));
+                renderWarnings(); renderDashboard();
+            }
+        }
+
+        // --- Hero Management Functions --- //
+        function renderHeroes() {
+            const container = document.getElementById('heroesContainer');
+            const allHeroes = [...defaultHeroes, ...customHeroes];
+            
+            container.innerHTML = allHeroes.map(hero => {
+                const isCustom = customHeroes.includes(hero);
+                const deleteBtn = isCustom ? `<button type="button" onclick="deleteCustomHero(event, '${hero}')" class="text-red-400 hover:text-red-300 ml-auto px-1">&times;</button>` : '';
+                const safeId = 'hero_' + hero.replace(/[^a-zA-Z0-9]/g, '_');
+                
+                return `
+                    <label class="flex items-center gap-2 cursor-pointer text-sm hover:text-white transition-colors bg-gray-800/50 p-1.5 rounded border border-gray-600/50">
+                        <input type="checkbox" name="hero" id="${safeId}" value="${hero}" class="w-4 h-4"> 
+                        <span class="truncate">${hero}</span>
+                        ${deleteBtn}
+                    </label>
+                `;
+            }).join('');
+
+            const currentFilter = heroFilter.value;
+            heroFilter.innerHTML = `<option value="All">Filter: All Heroes</option>` + allHeroes.map(h => `<option value="${h}">Filter: ${h}</option>`).join('');
+            if (currentFilter && [...allHeroes, 'All'].includes(currentFilter)) { heroFilter.value = currentFilter; }
+        }
+
+        function addNewHero() {
+            const input = document.getElementById('newHeroInput');
+            const heroName = input.value.trim();
+            if(!heroName) return;
+            
+            if(defaultHeroes.some(h => h.toLowerCase() === heroName.toLowerCase()) || customHeroes.some(h => h.toLowerCase() === heroName.toLowerCase())) {
+                return alert("Hero already exists in the list.");
+            }
+            customHeroes.push(heroName); localStorage.setItem('owCustomHeroes', JSON.stringify(customHeroes));
+            input.value = ''; renderHeroes();
+        }
+
+        function deleteCustomHero(e, heroName) {
+            e.preventDefault(); e.stopPropagation();
+            if(confirm(`Remove "${heroName}" from your hero options?`)) {
+                customHeroes = customHeroes.filter(h => h !== heroName);
+                localStorage.setItem('owCustomHeroes', JSON.stringify(customHeroes));
+                if (heroFilter.value === heroName) heroFilter.value = 'All';
+                renderHeroes(); renderDashboard();
+            }
+        }
+
+        // --- Folder Management Functions --- //
+        function createNewFolder() {
+            const newName = prompt("Enter new folder name:");
+            if (!newName || newName.trim() === '') return;
+            if (folders.includes(newName.trim())) return alert("A folder with this name already exists.");
+            folders.unshift(newName.trim()); activeFolder = newName.trim();
+            saveSystemState(); renderHistory();
+        }
+
+        function renameFolder(e, oldName) {
+            e.preventDefault(); e.stopPropagation(); 
+            const newName = prompt(`Rename folder "${oldName}" to:`, oldName);
+            if (!newName || newName.trim() === '' || newName === oldName) return;
+            if (folders.includes(newName.trim())) return alert("Exists.");
+            folders[folders.indexOf(oldName)] = newName.trim();
+            matches.forEach(m => { if(m.folder === oldName) m.folder = newName.trim(); });
+            if (activeFolder === oldName) activeFolder = newName.trim();
+            saveSystemState(); renderDashboard(); renderHistory();
+        }
+
+        function deleteFolder(e, folderName) {
+            e.preventDefault(); e.stopPropagation();
+            if (folders.length === 1) return alert("You cannot delete your only remaining folder.");
+            const folderMatches = matches.filter(m => m.folder === folderName);
+            let msg = `Delete folder "${folderName}"?`;
+            if (folderMatches.length > 0) msg += `\n\n${folderMatches.length} matches will be moved to "Uncategorized".`;
+            if (confirm(msg)) {
+                folders = folders.filter(f => f !== folderName);
+                if (folderMatches.length > 0) {
+                    if (!folders.includes("Uncategorized")) folders.push("Uncategorized");
+                    matches.forEach(m => { if (m.folder === folderName) m.folder = "Uncategorized"; });
+                }
+                if (activeFolder === folderName) activeFolder = folders.includes("Uncategorized") ? "Uncategorized" : folders[0];
+                saveSystemState(); renderDashboard(); renderHistory();
+            }
+        }
+
+        function updateActiveFolder() { activeFolder = folderSelect.value; saveSystemState(); }
+        function saveSystemState() {
+            localStorage.setItem('owAdvTracker', JSON.stringify(matches));
+            localStorage.setItem('owFolders', JSON.stringify(folders));
+            localStorage.setItem('owActiveFolder', activeFolder);
+        }
+
+        // --- Drag and Drop Logic --- //
+        let draggedIndex = null;
+        function handleDragStart(e, index) { draggedIndex = index; e.dataTransfer.effectAllowed = 'move'; setTimeout(() => e.target.classList.add('dragging'), 0); }
+        function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+        function handleDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+        function handleDrop(e, targetIndex) {
+            e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+            if (draggedIndex === null || draggedIndex === targetIndex) return;
+            folders.splice(targetIndex, 0, folders.splice(draggedIndex, 1)[0]);
+            saveSystemState(); renderHistory();
+        }
+        function handleDragEnd(e) { e.target.classList.remove('dragging'); draggedIndex = null; }
+
+        // --- Edit and Delete Match Logic --- //
+        function editMatch(id) {
+            const match = matches.find(m => m.id === id);
+            if (!match) return;
+            closeModal(); editingMatchId = id;
+
+            document.getElementById('formTitle').innerText = "Edit Match Data";
+            document.getElementById('editBadge').classList.remove('hidden');
+            document.getElementById('formContainer').classList.add('edit-mode-border');
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.innerText = "Update Match Data";
+            submitBtn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
+            submitBtn.classList.add('bg-orange-600', 'hover:bg-orange-500');
+            document.getElementById('cancelEditBtn').classList.remove('hidden');
+
+            document.getElementById('folderSelect').value = match.folder || activeFolder;
+            document.getElementById('blockInput').value = match.block || "Unassigned";
+            document.getElementById('replayInput').value = match.replay !== "N/A" ? match.replay : "";
+            document.getElementById('mapInput').value = match.map;
+            document.getElementById('queueInput').value = match.queue || "Solo";
+            document.getElementById('warmupInput').checked = match.warmup || false;
+            document.getElementById('titleInput').value = match.title || "";
+            document.getElementById('intentInput').value = match.intent || "";
+            document.getElementById('labelsInput').value = match.labels ? match.labels.join(', ') : "";
+            document.getElementById('isScrim').checked = match.isScrim;
+
+            // Load Timestamps
+            document.getElementById('timestampsContainer').innerHTML = '';
+            if(match.timestamps && match.timestamps.length > 0) {
+                match.timestamps.forEach(ts => addTimestampInput(ts.time, ts.note));
+            }
+
+            document.getElementById('timeManualBtn').checked = true;
+            toggleTimeInput();
+            try {
+                let d = new Date(match.date);
+                d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+                document.getElementById('manualTimeInput').value = d.toISOString().slice(0,16);
+            } catch(e) {}
+
+            document.querySelectorAll('input[name="result"]').forEach(r => r.checked = false);
+            if (match.result === 'Win') document.getElementById('resWin').checked = true;
+            if (match.result === 'Loss') document.getElementById('resLoss').checked = true;
+            if (match.result === 'Draw') document.getElementById('resDraw').checked = true;
+
+            document.querySelectorAll('input[name="hero"]').forEach(cb => cb.checked = false);
+            if (match.heroes && match.heroes !== "None selected") {
+                match.heroes.split(' + ').forEach(h => {
+                    const checkbox = Array.from(document.querySelectorAll('input[name="hero"]')).find(cb => cb.value === h);
+                    if (checkbox) checkbox.checked = true;
+                    else {
+                        customHeroes.push(h); localStorage.setItem('owCustomHeroes', JSON.stringify(customHeroes));
+                        renderHeroes(); Array.from(document.querySelectorAll('input[name="hero"]')).find(cb => cb.value === h).checked = true;
+                    }
+                });
+            }
+
+            const sliders = { mech: match.mechanics || 5, s1: match.s1, s2: match.s2, s3: match.s3, j1: match.j1, j2: match.j2, j3: match.j3, sp1: match.sp1, sp2: match.sp2, sp3: match.sp3 };
+            for (const [key, val] of Object.entries(sliders)) {
+                if(document.getElementById(key)) { document.getElementById(key).value = val; document.getElementById('val_' + key).innerText = val; }
+            }
+
+            document.getElementById('feedbackScout').value = match.feedbackScout || "";
+            document.getElementById('feedbackJab').value = match.feedbackJab || "";
+            document.getElementById('feedbackSpike').value = match.feedbackSpike || "";
+
+            // Populate Warnings
+            document.querySelectorAll('input[name="warning"]').forEach(cb => cb.checked = false);
+            if(match.warnings && match.warnings.length > 0) {
+                match.warnings.forEach(w => {
+                    const cb = Array.from(document.querySelectorAll('input[name="warning"]')).find(x => x.value === w);
+                    if(cb) cb.checked = true;
+                    else {
+                        customWarnings.push(w); localStorage.setItem('owCustomWarnings', JSON.stringify(customWarnings));
+                        renderWarnings(); Array.from(document.querySelectorAll('input[name="warning"]')).find(x => x.value === w).checked = true;
+                    }
+                });
+            }
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function cancelEdit() {
+            editingMatchId = null;
+            document.getElementById('formTitle').innerText = "Log Match Data";
+            document.getElementById('editBadge').classList.add('hidden');
+            document.getElementById('formContainer').classList.remove('edit-mode-border');
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.innerText = "Save Match Data";
+            submitBtn.classList.remove('bg-orange-600', 'hover:bg-orange-500');
+            submitBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+            
+            document.getElementById('matchForm').reset();
+            document.getElementById('timestampsContainer').innerHTML = '';
+            document.querySelector('input[name="timeType"][value="auto"]').checked = true; toggleTimeInput();
+            resetSliders();
+            document.getElementById('folderSelect').value = activeFolder;
+        }
+
+        function deleteMatch(id) {
+            if (confirm("Permanently delete this match?")) {
+                matches = matches.filter(m => m.id !== id);
+                if (editingMatchId === id) cancelEdit();
+                saveSystemState(); closeModal(); renderDashboard(); renderHistory();
+            }
+        }
+
+        // --- Form Submission --- //
+        document.getElementById('matchForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const heroCheckboxes = document.querySelectorAll('input[name="hero"]:checked');
+            let selectedHeroes = Array.from(heroCheckboxes).map(cb => cb.value);
+            if (selectedHeroes.length === 0) selectedHeroes = ["None selected"];
+
+            const warningCheckboxes = document.querySelectorAll('input[name="warning"]:checked');
+            let selectedWarnings = Array.from(warningCheckboxes).map(cb => cb.value);
+
+            let matchDate = new Date().toLocaleString();
+            if (document.querySelector('input[name="timeType"]:checked').value === 'manual') {
+                const manualVal = document.getElementById('manualTimeInput').value;
+                if(manualVal) matchDate = new Date(manualVal).toLocaleString();
+            } else if (editingMatchId) {
+                const originalMatch = matches.find(m => m.id === editingMatchId);
+                if (originalMatch) matchDate = originalMatch.date;
+            }
+
+            // Extract Timestamps
+            const tsEntries = document.querySelectorAll('.timestamp-entry');
+            const tsArray = [];
+            tsEntries.forEach(el => {
+                const t = el.querySelector('.ts-time').value.trim();
+                const n = el.querySelector('.ts-note').value.trim();
+                if(t || n) tsArray.push({time: t, note: n});
+            });
+
+            const matchData = {
+                id: editingMatchId || Date.now(),
+                date: matchDate,
+                folder: document.getElementById('folderSelect').value,
+                block: document.getElementById('blockInput').value,
+                queue: document.getElementById('queueInput').value,
+                warmup: document.getElementById('warmupInput').checked,
+                title: document.getElementById('titleInput').value.trim(),
+                intent: document.getElementById('intentInput').value.trim(),
+                labels: document.getElementById('labelsInput').value.split(',').map(l => l.trim()).filter(l => l !== ''),
+                timestamps: tsArray,
+                isScrim: document.getElementById('isScrim').checked,
+                replay: document.getElementById('replayInput').value.trim().toUpperCase() || "N/A",
+                map: document.getElementById('mapInput').value,
+                heroes: selectedHeroes.join(' + '),
+                result: document.querySelector('input[name="result"]:checked').value,
+                
+                mechanics: document.getElementById('mech').value,
+                s1: document.getElementById('s1').value, s2: document.getElementById('s2').value, s3: document.getElementById('s3').value,
+                j1: document.getElementById('j1').value, j2: document.getElementById('j2').value, j3: document.getElementById('j3').value,
+                sp1: document.getElementById('sp1').value, sp2: document.getElementById('sp2').value, sp3: document.getElementById('sp3').value,
+                
+                feedbackScout: document.getElementById('feedbackScout').value.trim(),
+                feedbackJab: document.getElementById('feedbackJab').value.trim(),
+                feedbackSpike: document.getElementById('feedbackSpike').value.trim(),
+                
+                warnings: selectedWarnings
+            };
+
+            if (editingMatchId) {
+                matches[matches.findIndex(m => m.id === editingMatchId)] = matchData;
+                cancelEdit();
+            } else {
+                matches.unshift(matchData);
+                document.getElementById('mapInput').value = ''; document.getElementById('replayInput').value = '';
+                document.getElementById('titleInput').value = ''; document.getElementById('intentInput').value = '';
+                document.getElementById('labelsInput').value = ''; document.getElementById('timestampsContainer').innerHTML = '';
+                document.getElementById('feedbackScout').value = ''; document.getElementById('feedbackJab').value = ''; document.getElementById('feedbackSpike').value = '';
+                document.getElementById('isScrim').checked = false; document.getElementById('warmupInput').checked = false;
+                document.querySelectorAll('input[name="hero"]').forEach(cb => cb.checked = false);
+                document.querySelectorAll('input[name="result"]').forEach(r => r.checked = false);
+                document.querySelectorAll('input[name="warning"]').forEach(cb => cb.checked = false);
+                resetSliders();
+            }
+
+            saveSystemState(); renderDashboard(); renderHistory();
+        });
+
+        function resetSliders() {
+            const sliders = ['mech','s1','s2','s3','j1','j2','j3','sp1','sp2','sp3'];
+            sliders.forEach(id => { if(document.getElementById(id)) { document.getElementById(id).value = 5; document.getElementById('val_' + id).innerText = 5; } });
+        }
+
+        // --- Graph & Diagnostics Updates --- //
+        function updateChart(dashboardMatches) {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            if (trendChartInstance) trendChartInstance.destroy();
+            const chartData = [...dashboardMatches].reverse().slice(-30);
+
+            trendChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartData.map((m, i) => m.map || `M${i+1}`),
+                    datasets: [
+                        { label: 'Scout', data: chartData.map(m => ((parseInt(m.s1) + parseInt(m.s2) + parseInt(m.s3)) / 3).toFixed(1)), borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.3, pointRadius: 2, borderWidth: 2 },
+                        { label: 'Jab', data: chartData.map(m => ((parseInt(m.j1) + parseInt(m.j2) + parseInt(m.j3)) / 3).toFixed(1)), borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.3, pointRadius: 2, borderWidth: 2 },
+                        { label: 'Spike', data: chartData.map(m => ((parseInt(m.sp1) + parseInt(m.sp2) + parseInt(m.sp3)) / 3).toFixed(1)), borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.3, pointRadius: 2, borderWidth: 2 },
+                        { label: 'Mech', data: chartData.map(m => parseInt(m.mechanics) || 5), borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.3, pointRadius: 2, borderWidth: 2 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { min: 1, max: 10, grid: { color: '#374151' }, ticks: { color: '#9ca3af' } }, x: { grid: { display: false }, ticks: { color: '#9ca3af', maxTicksLimit: 8 } } },
+                    plugins: { legend: { labels: { color: '#e5e7eb', usePointStyle: true, boxWidth: 6 } } },
+                    interaction: { mode: 'index', intersect: false }
+                }
+            });
+        }
+
+        function calculateWR(matchSet) {
+            let totalW = 0, totalM = 0;
+            matchSet.forEach(m => {
+                let w = m.isScrim ? 1.5 : 1.0;
+                if(m.result !== 'Draw') { totalM += w; if(m.result === 'Win') totalW += w; }
+            });
+            return totalM > 0 ? Math.round((totalW / totalM) * 100) : null;
+        }
+
+        function renderDiagnostics(dashboardMatches, baselineWR) {
+            const matrix = document.getElementById('diagnosticMatrix');
+            
+            const calcPenalty = (name, filterFn) => {
+                const flagged = dashboardMatches.filter(filterFn);
+                const wr = calculateWR(flagged);
+                if(wr === null || flagged.length === 0) return '';
+                const diff = wr - baselineWR;
+                const colorClass = diff < 0 ? 'text-red-400' : (diff > 0 ? 'text-green-400' : 'text-gray-400');
+                const diffStr = diff > 0 ? `+${diff}%` : `${diff}%`;
+                return `<div class="flex justify-between items-center text-xs text-gray-300 bg-gray-800 p-1.5 rounded border border-gray-700 mb-1.5">
+                    <span class="truncate flex-1 pr-2" title="${name}">🚨 ${name} <span class="text-[9px] text-gray-500">(${flagged.length})</span></span> 
+                    <span class="font-bold ${colorClass}">${wr}% <span class="text-[9px] font-normal">(${diffStr})</span></span>
+                </div>`;
+            };
+
+            const allPossibleWarnings = [...defaultWarnings, ...customWarnings];
+            let matrixHTML = allPossibleWarnings.map(wName => {
+                return calcPenalty(wName, m => m.warnings && m.warnings.includes(wName));
+            }).join('');
+            
+            // Add Warmup stat independently
+            const warmupFlagged = dashboardMatches.filter(m => m.warmup);
+            if(warmupFlagged.length > 0) {
+                const wWR = calculateWR(warmupFlagged);
+                if(wWR !== null) {
+                    const diff = wWR - baselineWR;
+                    const colorClass = diff < 0 ? 'text-red-400' : (diff > 0 ? 'text-green-400' : 'text-gray-400');
+                    const diffStr = diff > 0 ? `+${diff}%` : `${diff}%`;
+                    matrixHTML += `<div class="flex justify-between items-center text-xs text-gray-300 bg-gray-800 p-1.5 rounded border border-gray-700 mb-1.5">
+                        <span class="truncate flex-1 pr-2" title="Warmup Done">🔥 Warmup Done <span class="text-[9px] text-gray-500">(${warmupFlagged.length})</span></span> 
+                        <span class="font-bold ${colorClass}">${wWR}% <span class="text-[9px] font-normal">(${diffStr})</span></span>
+                    </div>`;
+                }
+            }
+
+            if(matrixHTML === '') matrixHTML = '<div class="text-xs text-gray-500 italic py-2">No warnings flagged yet.</div>';
+            matrix.innerHTML = matrixHTML;
+        }
+
+        function renderBlockComparison(dashboardMatches) {
+            const table = document.getElementById('blockComparisonTable');
+            const blocks = {};
+            
+            dashboardMatches.forEach(m => {
+                const b = m.block || "Unassigned";
+                if(!blocks[b]) blocks[b] = [];
+                blocks[b].push(m);
+            });
+
+            const sortedKeys = Object.keys(blocks).sort((a,b) => {
+                if(a === "Unassigned") return 1; if(b === "Unassigned") return -1;
+                return a.localeCompare(b);
+            });
+
+            table.innerHTML = sortedKeys.map(b => {
+                const bMatches = blocks[b];
+                const wr = calculateWR(bMatches) || 0;
+                
+                let tS = 0, tJ = 0, tSp = 0, tM = 0, wSum = 0;
+                bMatches.forEach(m => {
+                    let w = m.isScrim ? 1.5 : 1.0;
+                    tS += ((parseInt(m.s1) + parseInt(m.s2) + parseInt(m.s3)) / 3) * w;
+                    tJ += ((parseInt(m.j1) + parseInt(m.j2) + parseInt(m.j3)) / 3) * w;
+                    tSp += ((parseInt(m.sp1) + parseInt(m.sp2) + parseInt(m.sp3)) / 3) * w;
+                    tM += (parseInt(m.mechanics) || 5) * w;
+                    wSum += w;
+                });
+
+                const aS = wSum ? (tS/wSum).toFixed(1) : '-';
+                const aJ = wSum ? (tJ/wSum).toFixed(1) : '-';
+                const aSp = wSum ? (tSp/wSum).toFixed(1) : '-';
+                const aM = wSum ? (tM/wSum).toFixed(1) : '-';
+
+                const shortName = b.replace('Block ', 'B').replace(' (Days ', '\n').replace(')', '');
+
+                return `
+                    <tr class="border-b border-gray-700/50 hover:bg-gray-800 transition-colors">
+                        <td class="px-2 py-1.5 font-bold text-gray-300 whitespace-pre-line leading-tight" title="${b}">${shortName}</td>
+                        <td class="px-2 py-1.5 font-bold ${wr >= 50 ? 'text-green-400' : 'text-red-400'}">${wr}%</td>
+                        <td class="px-2 py-1.5 text-blue-300">${aS}</td>
+                        <td class="px-2 py-1.5 text-amber-300">${aJ}</td>
+                        <td class="px-2 py-1.5 text-red-300">${aSp}</td>
+                        <td class="px-2 py-1.5 text-emerald-300">${aM}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderDashboard() {
+            const selectedHero = document.getElementById('heroFilter').value;
+            let dashboardMatches = matches;
+            if (selectedHero && selectedHero !== 'All') { dashboardMatches = matches.filter(m => m.heroes.includes(selectedHero)); }
+
+            if (dashboardMatches.length === 0) {
+                statsDashboard.innerHTML = `<div class="col-span-full text-center text-gray-500 text-sm py-4">No match data available for this filter.</div>`;
+                document.getElementById('diagnosticMatrix').innerHTML = '';
+                document.getElementById('blockComparisonTable').innerHTML = '';
+                if(trendChartInstance) trendChartInstance.destroy();
+                return;
+            }
+
+            updateChart(dashboardMatches);
+
+            let totalWeight = 0, weightedWins = 0, weightedLosses = 0;
+            let totalS = 0, totalJ = 0, totalSp = 0, totalMech = 0;
+
+            dashboardMatches.forEach(m => {
+                let weight = m.isScrim ? 1.5 : 1.0;
+                if(m.result !== 'Draw') { totalWeight += weight; if (m.result === 'Win') weightedWins += weight; if (m.result === 'Loss') weightedLosses += weight; }
+                totalS += ((parseInt(m.s1) + parseInt(m.s2) + parseInt(m.s3)) / 3) * weight;
+                totalJ += ((parseInt(m.j1) + parseInt(m.j2) + parseInt(m.j3)) / 3) * weight;
+                totalSp += ((parseInt(m.sp1) + parseInt(m.sp2) + parseInt(m.sp3)) / 3) * weight;
+                totalMech += (parseInt(m.mechanics) || 5) * weight;
+            });
+
+            let statWeight = dashboardMatches.reduce((acc, m) => acc + (m.isScrim ? 1.5 : 1.0), 0);
+            let winRate = totalWeight > 0 ? Math.round((weightedWins / totalWeight) * 100) : 0;
+            let avgS = statWeight > 0 ? (totalS / statWeight).toFixed(1) : 0;
+            let avgJ = statWeight > 0 ? (totalJ / statWeight).toFixed(1) : 0;
+            let avgSp = statWeight > 0 ? (totalSp / statWeight).toFixed(1) : 0;
+            let avgMech = statWeight > 0 ? (totalMech / statWeight).toFixed(1) : 0;
+
+            let rawWins = dashboardMatches.filter(m => m.result === 'Win').length;
+            let rawLosses = dashboardMatches.filter(m => m.result === 'Loss').length;
+
+            statsDashboard.innerHTML = `
+                <div class="bg-gray-700 p-3 rounded text-center border border-gray-600">
+                    <div class="text-[10px] text-gray-400 uppercase">W/L Rate</div>
+                    <div class="text-xl font-bold text-white">${winRate}% <span class="text-[10px] font-normal text-gray-400 block">${rawWins}W-${rawLosses}L</span></div>
+                </div>
+                <div class="bg-gray-700 p-3 rounded text-center border border-gray-600">
+                    <div class="text-[10px] text-gray-400 uppercase">Avg Scout</div>
+                    <div class="text-xl font-bold text-blue-400">${avgS}</div>
+                </div>
+                <div class="bg-gray-700 p-3 rounded text-center border border-gray-600">
+                    <div class="text-[10px] text-gray-400 uppercase">Avg Jab</div>
+                    <div class="text-xl font-bold text-amber-400">${avgJ}</div>
+                </div>
+                <div class="bg-gray-700 p-3 rounded text-center border border-gray-600">
+                    <div class="text-[10px] text-gray-400 uppercase">Avg Spike</div>
+                    <div class="text-xl font-bold text-red-400">${avgSp}</div>
+                </div>
+                <div class="bg-gray-700 p-3 rounded text-center border border-gray-600">
+                    <div class="text-[10px] text-gray-400 uppercase">Avg Mech</div>
+                    <div class="text-xl font-bold text-emerald-400">${avgMech}</div>
+                </div>
+            `;
+
+            renderDiagnostics(dashboardMatches, winRate);
+            renderBlockComparison(dashboardMatches);
+        }
+
+        function renderHistory() {
+            historyContainer.innerHTML = '';
+            folderSelect.innerHTML = folders.map(f => `<option value="${f}" ${f === activeFolder ? 'selected' : ''}>${f}</option>`).join('');
+            const searchQuery = document.getElementById('searchInput').value.toLowerCase().trim();
+
+            if (folders.length === 0 && matches.length === 0) {
+                historyContainer.innerHTML = '<p class="text-gray-500 italic text-center mt-4">No match data logged.</p>'; return;
+            }
+
+            let foldersRendered = 0;
+            folders.forEach((folderName, index) => {
+                let folderMatches = matches.filter(m => m.folder === folderName);
+                
+                let fTotalWeight = 0, fWins = 0;
+                let fTotalS = 0, fTotalJ = 0, fTotalSp = 0, fTotalMech = 0;
+
+                folderMatches.forEach(m => {
+                    let w = m.isScrim ? 1.5 : 1.0;
+                    if(m.result !== 'Draw') { fTotalWeight += w; if(m.result === 'Win') fWins += w; }
+                    fTotalS += ((parseInt(m.s1) + parseInt(m.s2) + parseInt(m.s3)) / 3) * w;
+                    fTotalJ += ((parseInt(m.j1) + parseInt(m.j2) + parseInt(m.j3)) / 3) * w;
+                    fTotalSp += ((parseInt(m.sp1) + parseInt(m.sp2) + parseInt(m.sp3)) / 3) * w;
+                    fTotalMech += (parseInt(m.mechanics) || 5) * w;
+                });
+
+                let fStatWeight = folderMatches.reduce((acc, m) => acc + (m.isScrim ? 1.5 : 1.0), 0);
+                let fWinRate = fTotalWeight > 0 ? Math.round((fWins / fTotalWeight) * 100) : 0;
+                let fAvgS = fStatWeight > 0 ? (fTotalS / fStatWeight).toFixed(1) : '-';
+                let fAvgJ = fStatWeight > 0 ? (fTotalJ / fStatWeight).toFixed(1) : '-';
+                let fAvgSp = fStatWeight > 0 ? (fTotalSp / fStatWeight).toFixed(1) : '-';
+                let fAvgMech = fStatWeight > 0 ? (fTotalMech / fStatWeight).toFixed(1) : '-';
+
+                if (searchQuery !== '') {
+                    folderMatches = folderMatches.filter(m => {
+                        return (m.title || '').toLowerCase().includes(searchQuery) || (m.labels || []).join(' ').toLowerCase().includes(searchQuery) || 
+                               (m.map || '').toLowerCase().includes(searchQuery) || (m.heroes || '').toLowerCase().includes(searchQuery) || 
+                               (m.intent || '').toLowerCase().includes(searchQuery) || (m.block || '').toLowerCase().includes(searchQuery);
+                    });
+                    if (folderMatches.length === 0) return; 
+                }
+                
+                let matchesHTML = folderMatches.map(match => {
+                    let resultColor = match.result === 'Win' ? 'text-green-400' : match.result === 'Loss' ? 'text-red-400' : 'text-yellow-400';
+                    let bgHighlight = match.isScrim ? 'bg-amber-900/10 border-amber-600/60' : 'bg-gray-700 border-gray-600';
+                    let scrimBadge = match.isScrim ? `<span class="bg-amber-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded ml-2">SCRIM</span>` : '';
+                    let warmupBadge = match.warmup ? `<span class="text-[10px] ml-1" title="Warmup Completed">🔥</span>` : '';
+                    let replayBadge = match.replay !== "N/A" ? `<span class="bg-blue-900/50 text-blue-300 border border-blue-700 px-2 py-0.5 rounded text-[10px] tracking-wider ml-2">🎥 ${match.replay}</span>` : '';
+                    let queueTxt = match.queue ? `<span class="text-[10px] text-gray-400 ml-2">(${match.queue})</span>` : '';
+                    
+                    let titleHTML = match.title ? `<div class="font-bold text-blue-200 text-sm mb-1 line-clamp-1">${match.title}</div>` : '';
+                    let intentHTML = match.intent ? `<div class="text-[11px] text-gray-400 italic mb-2 line-clamp-1">🎯 ${match.intent}</div>` : '';
+                    let labelsHTML = (match.labels && match.labels.length > 0) ? `<div class="flex flex-wrap gap-1 mt-2">` + match.labels.map(l => `<span class="bg-gray-800 text-gray-300 text-[10px] px-1.5 py-0.5 rounded border border-gray-600">#${l}</span>`).join('') + `</div>` : '';
+
+                    let avgScout = ((parseInt(match.s1) + parseInt(match.s2) + parseInt(match.s3)) / 3).toFixed(1);
+                    let avgJab = ((parseInt(match.j1) + parseInt(match.j2) + parseInt(match.j3)) / 3).toFixed(1);
+                    let avgSpike = ((parseInt(match.sp1) + parseInt(match.sp2) + parseInt(match.sp3)) / 3).toFixed(1);
+                    let mechScr = match.mechanics || 5;
+                    
+                    let wCount = match.warnings ? match.warnings.length : 0;
+                    let warningBadge = wCount > 0 ? `<div class="absolute top-4 right-4 bg-red-900/80 text-red-300 text-[10px] font-bold px-1.5 py-0.5 rounded border border-red-700 shadow">🚨 ${wCount}</div>` : '';
+
+                    return `
+                        <div onclick="openModal(${match.id})" class="${bgHighlight} p-4 rounded-lg border shadow relative cursor-pointer hover:bg-gray-600 transition-colors mt-2">
+                            ${warningBadge}
+                            ${titleHTML}
+                            ${intentHTML}
+                            <div class="flex justify-between items-start mb-2 border-b border-gray-600/50 pb-2">
+                                <div>
+                                    <span class="font-black text-lg ${resultColor}">${match.result}</span>
+                                    <span class="text-gray-200 ml-2 font-medium">${match.map}</span>
+                                    ${queueTxt}
+                                    ${scrimBadge}
+                                    ${warmupBadge}
+                                    ${replayBadge}
+                                    <div class="text-xs text-gray-400 mt-1">${match.heroes}</div>
+                                </div>
+                                <span class="text-[10px] text-gray-400 text-right pr-6">${match.date.replace(', ', '<br>')}</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-2 text-center text-[10px] uppercase tracking-wider text-gray-400 pointer-events-none">
+                                <div class="bg-gray-800 p-1.5 rounded border border-gray-700/50">Scout <span class="text-white text-sm font-bold ml-1">${avgScout}</span></div>
+                                <div class="bg-gray-800 p-1.5 rounded border border-gray-700/50">Jab <span class="text-white text-sm font-bold ml-1">${avgJab}</span></div>
+                                <div class="bg-gray-800 p-1.5 rounded border border-gray-700/50">Spike <span class="text-white text-sm font-bold ml-1">${avgSpike}</span></div>
+                                <div class="bg-gray-800 p-1.5 rounded border border-gray-700/50">Mech <span class="text-emerald-400 text-sm font-bold ml-1">${mechScr}</span></div>
+                            </div>
+                            ${labelsHTML}
+                        </div>
+                    `;
+                }).join('');
+
+                const folderElement = `
+                    <details 
+                        draggable="true" ondragstart="handleDragStart(event, ${index})" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, ${index})" ondragend="handleDragEnd(event)"
+                        class="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden transition-all duration-200" open>
+                        <summary class="bg-gray-700/80 p-3 cursor-pointer hover:bg-gray-700 flex flex-col xl:flex-row xl:justify-between xl:items-center select-none gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="cursor-grab text-gray-400 hover:text-white px-1">☰</span>
+                                <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                <span class="font-bold text-gray-200">📁 ${folderName}</span>
+                                <span class="text-xs text-gray-400 font-normal ml-1">(${fStatWeight === 0 ? 0 : matches.filter(m => m.folder === folderName).length})</span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-3 pl-8 xl:pl-0">
+                                <div class="flex items-center gap-2 text-[10px] uppercase tracking-wider text-gray-400 bg-gray-900/50 px-2 py-1 rounded border border-gray-600/50">
+                                    <div>WR <span class="text-white font-bold ml-0.5">${fWinRate}%</span></div>
+                                    <div>SCT <span class="text-blue-400 font-bold ml-0.5">${fAvgS}</span></div>
+                                    <div>JAB <span class="text-blue-400 font-bold ml-0.5">${fAvgJ}</span></div>
+                                    <div>SPK <span class="text-blue-400 font-bold ml-0.5">${fAvgSp}</span></div>
+                                    <div>MCH <span class="text-emerald-400 font-bold ml-0.5">${fAvgMech}</span></div>
+                                </div>
+                                <div class="flex gap-1">
+                                    <button onclick="renameFolder(event, '${folderName}')" class="text-[10px] uppercase tracking-wide font-bold text-blue-400 hover:bg-gray-600 bg-gray-800 px-2 py-1 rounded border border-gray-600">Ren</button>
+                                    <button onclick="deleteFolder(event, '${folderName}')" class="text-[10px] uppercase tracking-wide font-bold text-red-400 hover:bg-gray-600 bg-gray-800 px-2 py-1 rounded border border-gray-600">Del</button>
+                                </div>
+                            </div>
+                        </summary>
+                        <div class="p-3 bg-gray-800/50 border-t border-gray-700">
+                            ${matchesHTML || '<p class="text-xs text-gray-500 italic text-center py-3">Folder is empty</p>'}
+                        </div>
+                    </details>
+                `;
+                historyContainer.innerHTML += folderElement;
+                foldersRendered++;
+            });
+
+            if (searchQuery !== '' && foldersRendered === 0) historyContainer.innerHTML = '<p class="text-gray-500 italic text-center mt-4">No matches found.</p>';
+            
+            document.querySelectorAll('details').forEach(el => {
+                el.addEventListener('toggle', () => {
+                    const svg = el.querySelector('svg');
+                    if(svg) { svg.style.transform = el.open ? 'rotate(0deg)' : 'rotate(-90deg)'; }
+                });
+            });
+        }
+
+        // --- Modals and Export --- //
+        function openModal(matchId) {
+            const match = matches.find(m => m.id === matchId);
+            if(!match) return;
+
+            let mWarnings = match.warnings || [];
+            let warningHTML = mWarnings.length > 0 
+                ? `<div class="mt-4 p-3 bg-red-900/30 border border-red-800 rounded text-red-300 text-sm"><b>🚨 Warnings Triggered:</b><ul class="list-disc ml-5 mt-1"><li>${mWarnings.join('</li><li>')}</li></ul></div>` 
+                : '<div class="mt-4 p-2 bg-green-900/20 border border-green-800/50 rounded text-green-400 text-xs text-center">✅ No bad habits flagged</div>';
+
+            let titleHTML = match.title ? `<h4 class="text-lg font-bold text-blue-200 mb-1">${match.title}</h4>` : '';
+            let intentHTML = match.intent ? `<div class="bg-gray-900/50 p-2 rounded border border-gray-700 mt-2"><p class="text-sm text-gray-300 italic">🎯 <b>Intent:</b> ${match.intent}</p></div>` : '';
+            let labelsHTML = (match.labels && match.labels.length > 0) ? `<div class="flex flex-wrap gap-1 mt-3">` + match.labels.map(l => `<span class="bg-gray-700 text-gray-300 text-xs px-2 py-1 rounded border border-gray-600">#${l}</span>`).join('') + `</div>` : '';
+
+            let scoutFeedbackHTML = match.feedbackScout ? `<div class="mt-2 text-xs text-gray-400 bg-gray-900/50 p-2 rounded border border-gray-700 italic">"${match.feedbackScout}"</div>` : '';
+            let jabFeedbackHTML = match.feedbackJab ? `<div class="mt-2 text-xs text-gray-400 bg-gray-900/50 p-2 rounded border border-gray-700 italic">"${match.feedbackJab}"</div>` : '';
+            let spikeFeedbackHTML = match.feedbackSpike ? `<div class="mt-2 text-xs text-gray-400 bg-gray-900/50 p-2 rounded border border-gray-700 italic">"${match.feedbackSpike}"</div>` : '';
+            
+            let warmupTxt = match.warmup ? `<span class="text-emerald-400 text-[10px] ml-2 font-bold bg-emerald-900/30 px-1.5 py-0.5 rounded border border-emerald-800">🔥 Warmup Done</span>` : '';
+            let qTxt = match.queue ? `<span class="text-gray-400 text-xs ml-2">(${match.queue})</span>` : '';
+            let blockTxt = match.block && match.block !== "Unassigned" ? `<span class="text-blue-300 bg-blue-900/30 border border-blue-800 px-1.5 py-0.5 rounded text-[10px] uppercase ml-2">${match.block}</span>` : '';
+
+            let timestampsHTML = '';
+            if(match.timestamps && match.timestamps.length > 0) {
+                timestampsHTML = `<div class="mt-3 border border-blue-900/50 bg-blue-900/10 p-2 rounded">
+                    <h5 class="text-xs font-bold text-blue-300 mb-2 border-b border-blue-900/50 pb-1">VOD Timestamps</h5>
+                    <ul class="space-y-1 text-xs text-gray-300">
+                        ${match.timestamps.map(ts => `<li><span class="font-mono text-white bg-gray-800 px-1 rounded">${ts.time}</span> - ${ts.note}</li>`).join('')}
+                    </ul>
+                </div>`;
+            }
+
+            const modalContent = `
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex-1 pr-4">
+                        ${titleHTML}
+                        <h3 class="text-xl font-bold text-white flex items-center flex-wrap gap-2">
+                            ${match.result} on ${match.map} ${qTxt}
+                            ${match.isScrim ? '<span class="bg-amber-600 text-white text-[10px] px-1.5 py-0.5 rounded">SCRIM</span>' : ''}
+                            ${warmupTxt}
+                            ${blockTxt}
+                        </h3>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="editMatch(${match.id})" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded transition-colors shadow">✏️ Edit</button>
+                        <button onclick="deleteMatch(${match.id})" class="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded transition-colors shadow">🗑️ Delete</button>
+                    </div>
+                </div>
+                
+                <div class="mb-4 border-b border-gray-700 pb-4">
+                    <p class="text-sm text-gray-400 mt-1">${match.date} | Folder: ${match.folder}</p>
+                    <p class="text-sm text-blue-300 mt-1">Heroes: ${match.heroes}</p>
+                    ${match.replay !== "N/A" ? `<p class="text-sm text-gray-300 mt-1">Replay: <span class="font-mono text-white bg-gray-700 px-1 py-0.5 rounded border border-gray-600">${match.replay}</span></p>` : ''}
+                    ${timestampsHTML}
+                    ${intentHTML}
+                    ${labelsHTML}
+                </div>
+                
+                <div class="grid grid-cols-1 gap-4 text-sm text-gray-300">
+                    <div class="bg-gray-900/30 p-2 rounded border border-gray-700/50">
+                        <div class="flex justify-between items-center"><span class="font-bold text-emerald-400">Raw Mechanics & Aim</span> <span class="font-bold text-emerald-400">${match.mechanics || 5}/10</span></div>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-100 border-b border-gray-700 mb-1">Scouting</h4>
+                        <div class="flex justify-between"><span>Prioritization:</span> <span class="font-bold">${match.s1}/10</span></div>
+                        <div class="flex justify-between"><span>Angle Breaking:</span> <span class="font-bold">${match.s2}/10</span></div>
+                        <div class="flex justify-between"><span>Resource Save:</span> <span class="font-bold">${match.s3}/10</span></div>
+                        ${scoutFeedbackHTML}
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-100 border-b border-gray-700 mb-1">Jabbing</h4>
+                        <div class="flex justify-between"><span>Tempo Sync:</span> <span class="font-bold">${match.j1}/10</span></div>
+                        <div class="flex justify-between"><span>Resource Force:</span> <span class="font-bold">${match.j2}/10</span></div>
+                        <div class="flex justify-between"><span>Cover Return:</span> <span class="font-bold">${match.j3}/10</span></div>
+                        ${jabFeedbackHTML}
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-100 border-b border-gray-700 mb-1">Spiking</h4>
+                        <div class="flex justify-between"><span>Green Light Engage:</span> <span class="font-bold">${match.sp1}/10</span></div>
+                        <div class="flex justify-between"><span>Resource Focus:</span> <span class="font-bold">${match.sp2}/10</span></div>
+                        <div class="flex justify-between"><span>Target Switching:</span> <span class="font-bold">${match.sp3}/10</span></div>
+                        ${spikeFeedbackHTML}
+                    </div>
+                </div>
+                ${warningHTML}
+            `;
+
+            document.getElementById('modalContent').innerHTML = modalContent;
+            document.getElementById('detailsModal').classList.remove('hidden');
+        }
+
+        function closeModal() { document.getElementById('detailsModal').classList.add('hidden'); }
+        document.getElementById('detailsModal').addEventListener('click', function(e) { if(e.target === this) closeModal(); });
+
+        // --- CSV Engine --- //
+        function parseCSVString(str) {
+            const arr = []; let quote = false; let col = 0, row = 0;
+            for (let c = 0; c < str.length; c++) {
+                let cc = str[c], nc = str[c+1];
+                arr[row] = arr[row] || []; arr[row][col] = arr[row][col] || '';
+                if (cc == '"' && quote && nc == '"') { arr[row][col] += cc; ++c; continue; }
+                if (cc == '"') { quote = !quote; continue; }
+                if (cc == ',' && !quote) { ++col; continue; }
+                if (cc == '\r' && nc == '\n' && !quote) { ++row; col = 0; ++c; continue; }
+                if (cc == '\n' && !quote) { ++row; col = 0; continue; }
+                if (cc == '\r' && !quote) { ++row; col = 0; continue; }
+                arr[row][col] += cc;
+            }
+            return arr;
+        }
+
+        function handleImportCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const rows = parseCSVString(e.target.result);
+                if (rows.length < 2) return alert("File is empty or invalid.");
+
+                const headers = rows[0].map(h => h.trim());
+                const col = {}; headers.forEach((h, i) => col[h] = i);
+
+                let importCount = 0; let foundNewHeroes = false; let foundNewWarnings = false;
+
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (row.length < 5) continue;
+
+                    let rawTs = row[col['Timestamps']] || '';
+                    let parsedTs = [];
+                    if(rawTs) {
+                        parsedTs = rawTs.split('|').map(ts => {
+                            let parts = ts.split('~');
+                            if(parts.length === 2) return {time: parts[0].trim(), note: parts[1].trim()};
+                            return null;
+                        }).filter(x => x !== null);
+                    }
+
+                    // Handle legacy warnings or new warnings array
+                    let warningsArr = [];
+                    if (col['Warnings'] !== undefined) {
+                        let wRaw = row[col['Warnings']];
+                        if(wRaw) warningsArr = wRaw.split(';').map(x=>x.trim()).filter(x=>x);
+                    } else {
+                        if(row[col['Warn_Spike']] === 'true') warningsArr.push(defaultWarnings[0]);
+                        if(row[col['Warn_Jab']] === 'true') warningsArr.push(defaultWarnings[1]);
+                        if(row[col['Warn_GreenLight']] === 'true') warningsArr.push(defaultWarnings[2]);
+                    }
+
+                    const match = {
+                        id: Date.now() + i,
+                        date: row[col['Date']] || new Date().toLocaleString(),
+                        folder: row[col['Folder']] || 'Uncategorized',
+                        block: row[col['Macro_Block']] || 'Unassigned',
+                        title: row[col['Title']] || '',
+                        intent: row[col['Intent']] || '',
+                        labels: row[col['Labels']] ? row[col['Labels']].split(';').map(x=>x.trim()).filter(x=>x) : [],
+                        timestamps: parsedTs,
+                        queue: row[col['Queue']] || 'Solo',
+                        isScrim: row[col['Is_Scrim']] === 'true',
+                        warmup: row[col['Warmup']] === 'true',
+                        replay: row[col['Replay_Code']] || 'N/A',
+                        map: row[col['Map']] || 'Unknown',
+                        heroes: row[col['Heroes']] || '',
+                        result: row[col['Result']] || 'Draw',
+                        
+                        mechanics: parseInt(row[col['Mechanics']]) || 5,
+                        s1: parseInt(row[col['S_Scouting']]) || 5, s2: parseInt(row[col['S_AngleBreak']]) || 5, s3: parseInt(row[col['S_Resources']]) || 5,
+                        j1: parseInt(row[col['J_Tempo']]) || 5, j2: parseInt(row[col['J_Efficiency']]) || 5, j3: parseInt(row[col['J_Cover']]) || 5,
+                        sp1: parseInt(row[col['SP_GreenLight']]) || 5, sp2: parseInt(row[col['SP_Resources']]) || 5, sp3: parseInt(row[col['SP_TargetSwitch']]) || 5,
+                        
+                        feedbackScout: row[col['Feedback_Scout']] || '', feedbackJab: row[col['Feedback_Jab']] || '', feedbackSpike: row[col['Feedback_Spike']] || '',
+                        warnings: warningsArr
+                    };
+
+                    if (!folders.includes(match.folder)) folders.push(match.folder);
+
+                    if (match.heroes && match.heroes !== "None selected") {
+                        match.heroes.split(' + ').forEach(h => {
+                            if (h && !defaultHeroes.includes(h) && !customHeroes.includes(h)) {
+                                customHeroes.push(h); foundNewHeroes = true;
+                            }
+                        });
+                    }
+
+                    if (match.warnings) {
+                        match.warnings.forEach(w => {
+                            if (!defaultWarnings.includes(w) && !customWarnings.includes(w)) {
+                                customWarnings.push(w); foundNewWarnings = true;
+                            }
+                        });
+                    }
+
+                    matches.push(match); importCount++;
+                }
+
+                matches.sort((a, b) => new Date(b.date) - new Date(a.date));
+                if (foundNewHeroes) localStorage.setItem('owCustomHeroes', JSON.stringify(customHeroes));
+                if (foundNewWarnings) localStorage.setItem('owCustomWarnings', JSON.stringify(customWarnings));
+                saveSystemState(); renderHeroes(); renderWarnings(); renderDashboard(); renderHistory();
+                alert(`Successfully imported ${importCount} matches!`);
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function exportCSV() {
+            if (matches.length === 0) return alert('No data to export!');
+            const headers = [
+                'Date', 'Folder', 'Macro_Block', 'Title', 'Intent', 'Labels', 'Timestamps', 'Queue', 'Is_Scrim', 'Warmup', 'Map', 'Heroes', 'Result', 'Replay_Code',
+                'Mechanics', 'S_Scouting', 'S_AngleBreak', 'S_Resources', 'J_Tempo', 'J_Efficiency', 'J_Cover', 'SP_GreenLight', 'SP_Resources', 'SP_TargetSwitch',
+                'Feedback_Scout', 'Feedback_Jab', 'Feedback_Spike', 'Warnings'
+            ];
+            
+            const csvRows = [headers.join(',')];
+            matches.forEach(m => {
+                let tsStr = m.timestamps ? m.timestamps.map(ts => `${ts.time}~${ts.note}`).join('|') : '';
+                let safeWarns = m.warnings ? m.warnings.join(';') : '';
+
+                const row = [
+                    `"${m.date}"`, `"${m.folder}"`, `"${m.block || 'Unassigned'}"`, `"${m.title ? m.title.replace(/"/g, '""') : ''}"`, `"${m.intent ? m.intent.replace(/"/g, '""') : ''}"`, 
+                    `"${m.labels ? m.labels.join(';') : ''}"`, `"${tsStr.replace(/"/g, '""')}"`, `"${m.queue || 'Solo'}"`, m.isScrim, m.warmup || false, `"${m.map}"`, `"${m.heroes}"`, `"${m.result}"`, `"${m.replay}"`,
+                    m.mechanics || 5, m.s1, m.s2, m.s3, m.j1, m.j2, m.j3, m.sp1, m.sp2, m.sp3,
+                    `"${m.feedbackScout ? m.feedbackScout.replace(/"/g, '""') : ''}"`, `"${m.feedbackJab ? m.feedbackJab.replace(/"/g, '""') : ''}"`, `"${m.feedbackSpike ? m.feedbackSpike.replace(/"/g, '""') : ''}"`,
+                    `"${safeWarns.replace(/"/g, '""')}"`
+                ];
+                csvRows.push(row.join(','));
+            });
+
+            const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('hidden', ''); a.setAttribute('href', url); a.setAttribute('download', 'ow_tracker_psevpsevpsev.csv');
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        }
+
+        function clearHistory() {
+            if(confirm("Are you sure you want to clear your local history? Export your CSV first!")) {
+                matches = []; folders = ['Uncategorized']; activeFolder = 'Uncategorized'; customHeroes = []; customWarnings = [];
+                localStorage.removeItem('owCustomHeroes'); localStorage.removeItem('owCustomWarnings');
+                saveSystemState(); renderHeroes(); renderWarnings(); renderDashboard(); renderHistory();
+            }
+        }
+
+        renderHeroes(); renderWarnings(); renderDashboard(); renderHistory();
+    </script>
+</body>
+</html>
